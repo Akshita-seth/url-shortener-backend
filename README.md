@@ -103,3 +103,43 @@ HTTP Redirect
 - No caching yet.
 - No Redis integration.
 - No idempotency or rate limiting.
+
+
+## V4 — Redis Caching
+
+### 1. Implemented
+
+- Redis integration for URL caching
+- Cache-aside pattern for short-code lookups
+- Redis cache HIT and MISS handling
+- PostgreSQL fallback on cache MISS
+- 1-hour TTL for cached URLs
+- Graceful fallback when Redis is unavailable
+- PostgreSQL remains the source of truth
+- Analytics continue to be stored in PostgreSQL
+
+### 2. Architecture
+
+Client
+   ↓
+FastAPI
+   ↓
+Redis
+ ┌─┴───────────┐
+HIT           MISS
+ ↓              ↓
+URL         PostgreSQL
+ ↓              ↓
+Analytics   Redis SET
+ └──────┬───────┘
+        ↓
+     Redirect
+
+
+### 3. Limitations
+
+- Analytics still require a PostgreSQL operation on every redirect.
+- Cache invalidation is not implemented because URL updates are not currently supported.
+- Redis failure can add latency because the application first attempts the Redis connection before falling back to PostgreSQL.
+- No rate limiting yet.
+- No idempotency or concurrent-request protection yet.

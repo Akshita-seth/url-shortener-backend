@@ -2,6 +2,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
+import redis
 
 from app.database import get_db
 from app.schemas import URLCreate  #importing our Pydantic model
@@ -9,6 +10,7 @@ from app.services.url_service import (
     create_short_url,
     get_url_by_short_code
 ) #importing our service functions for creation and retrieval 
+from app.redis_client import redis_client
 
 
 app = FastAPI()  #create an instance of the FastAPI class i.e. FastAPI Application
@@ -38,13 +40,34 @@ def redirect_to_url(
     short_code: str,
     db: Session = Depends(get_db)
 ):
-    url = get_url_by_short_code(db, short_code)
+    try: #for handling redis failure if unavailble, gracefully 
+        original_url = redis_client.get(short_code)
+    except redis.RedisError:
+        original_url = None
 
-    if url is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Short URL not found"
-        )
+    if original_url is None:  #redis cache miss
+        url = get_url_by_short_code(db, short_code)  #seacrches in db
+
+        if url is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Short URL not found"
+            )
+
+        original_url = url.original_url
+
+        #store in redis so the next request can use redis, but only possible if redis avaailable therefore andling redis failure gracefully
+        try:
+            redis_client.set(
+                short_code,
+                original_url,
+                ex=3600
+            )
+        except redis.RedisError:
+            pass
+
+    else:
+        url = get_url_by_short_code(db, short_code)
 
     # Update click count and last accessed timestamp
     url.click_count += 1
