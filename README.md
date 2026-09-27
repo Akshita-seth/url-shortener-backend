@@ -16,7 +16,6 @@ A backend project built progressively to learn backend engineering concepts and 
 
 ### 2. Architecture — V1
 
-```text
 Client
    ↓
 FastAPI
