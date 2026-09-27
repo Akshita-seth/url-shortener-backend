@@ -1,6 +1,7 @@
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
+from datetime import datetime
 
 from app.database import get_db
 from app.schemas import URLCreate  #importing our Pydantic model
@@ -17,7 +18,8 @@ app = FastAPI()  #create an instance of the FastAPI class i.e. FastAPI Applicati
 def root():
     return {"message": "URL Shortener API"}  #Returns a Python dictionary. FastAPI converts it into a JSON HTTP response.
 
-
+#Acts as the API layer. It receives the HTTP request, gets the database session, 
+# calls the service, and constructs the HTTP response.
 @app.post("/api/v1/urls")
 def create_url(request: URLCreate, 
                db: Session = Depends(get_db) #FastAPI's dependency injection
@@ -44,5 +46,11 @@ def redirect_to_url(
             detail="Short URL not found"
         )
 
+    # Update click count and last accessed timestamp
+    url.click_count += 1
+    url.last_accessed_at = datetime.now()
+    #only modify the SQLAlchemy Python object initially
+
+    db.commit()  #persists those changes to PostgreSQL
     return RedirectResponse(url=url.original_url)
 

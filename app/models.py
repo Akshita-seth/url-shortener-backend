@@ -5,6 +5,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 #DecBase: gives us SQLAlchemy's base class for defining database models.
 #Mapped: SQLAlchemy's way to say This Python attribute is mapped to a database column.
 #mapped_column: actually gives us the database-column configuratio
+from datetime import datetime
 
 class Base(DeclarativeBase):  #it inherits from SQLAlchemy’s DeclarativeBase
     pass
@@ -21,3 +22,11 @@ class URL(Base): #URL is a SQLAlchemy database model.
         unique=True,
         nullable=False
     )
+    click_count: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False
+    )
+
+    last_accessed_at: Mapped[datetime | None] = mapped_column(
+        nullable=True
+    )  # None? Because a newly created URL hasn't been accessed yet

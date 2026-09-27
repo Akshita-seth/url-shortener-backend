@@ -73,3 +73,33 @@ PostgreSQL
 - No idempotency.
 - No concurrency protection for duplicate creation requests.
 - No rate limiting.
+
+## V3 — Redirect Analytics
+
+### 1. Implemented
+
+- Click count tracking
+- Last accessed timestamp
+- PostgreSQL-backed analytics updates
+- Persistent analytics data on every successful redirect
+
+### 2. Architecture
+
+Client
+   ↓
+FastAPI
+   ↓
+SQLAlchemy Session
+   ↓
+PostgreSQL
+   ↓
+Find URL + Update Analytics
+   ↓
+HTTP Redirect
+
+### 3. Limitations:
+- Every redirect queries PostgreSQL.
+- High redirect traffic can increase database load.
+- No caching yet.
+- No Redis integration.
+- No idempotency or rate limiting.
