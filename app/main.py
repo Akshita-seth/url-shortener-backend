@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, HTTPException, Header
+from fastapi import Depends, FastAPI, HTTPException, Header, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -15,6 +15,7 @@ from app.services.url_service import (
 ) #importing our service functions for creation and retrieval 
 from app.redis_client import redis_client
 from app.models import IdempotencyKey
+from app.rate_limiter import check_rate_limit
 
 
 app = FastAPI()  #create an instance of the FastAPI class i.e. FastAPI Application
@@ -29,12 +30,14 @@ def root():
 #Acts as the API layer. It receives the HTTP request, gets the database session, 
 # calls the service, and constructs the HTTP response.
 @app.post("/api/v1/urls")
-def create_url(request: URLCreate, 
+def create_url(request: URLCreate,
+               http_request: Request, 
                db: Session = Depends(get_db), #FastAPI's dependency injection => #Depends(get_db) tells FastAPI: "Before you run this function, call get_db() to get a database session and pass it in the fn as the db argument.
                idempotency_key: str = Header(..., alias="Idempotency-Key")  #FastAPI, take the Idempotency-Key HTTP header and give its value to the variable idempotency_key (... means this header is required, and alias="Idempotency-Key" tells FastAPI to look for the HTTP header with that exact name, including the hyphen)
         ):    #Header(...) This tells FastAPI: Don't get this value from the JSON body or URL path. Get it from an HTTP request header.
               #The alias tells FastAPI:The HTTP header is actually called Idempotency-Key; put its value into the Python variable idempotency_key.
 
+    check_rate_limit(http_request)
 
     #calculate a request hash
     request_hash = hashlib.sha256(

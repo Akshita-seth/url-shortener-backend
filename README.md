@@ -244,3 +244,48 @@ Commit       Rollback
 - Rate limiting is not implemented yet.
 - The current rate-limiting protection will be added using Redis in V7.
 - Analytics are still persisted in PostgreSQL on every redirect.
+
+
+## V7 — Redis Rate Limiting
+
+### 1. Implemented
+
+- Redis-based IP rate limiting for `POST /api/v1/urls`
+- Fixed-window rate limiting
+- 5 requests per minute per IP for development/testing
+- Atomic Redis `INCR` counter
+- 60-second Redis TTL for rate-limit windows
+- HTTP `429 Too Many Requests` when the limit is exceeded
+- Graceful degradation when Redis is unavailable
+- Rate limiting is applied only to URL creation; redirects are not rate-limited
+
+### 2. Architecture
+
+
+POST /api/v1/urls
+        ↓
+   Rate Limiter
+        ↓
+   Client IP
+        ↓
+      Redis
+        ↓
+    INCR counter
+        ↓
+   ┌────┴─────┐
+   ↓          ↓
+≤ 5          > 5
+   ↓          ↓
+Allow        429
+   ↓
+Idempotency
+   ↓
+PostgreSQL
+
+### Limitations:
+
+- Rate limiting currently uses a fixed-window strategy.
+- The development limit is 5 requests per minute per IP; this can be configured for production.
+- Rate limiting is currently applied only to POST /api/v1/urls.
+- If Redis is unavailable, requests are allowed through without rate limiting.
+- Redis connection timeout configuration can be improved for faster failure detection.
