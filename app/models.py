@@ -30,3 +30,26 @@ class URL(Base): #URL is a SQLAlchemy database model.
     last_accessed_at: Mapped[datetime | None] = mapped_column(
         nullable=True
     )  # None? Because a newly created URL hasn't been accessed yet
+
+
+class IdempotencyKey(Base):
+    __tablename__ = "idempotency_keys"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    #client's Idempotency-Key
+    key: Mapped[str] = mapped_column( 
+        String(255),  # VARCHAR(255) in PostgreSQL
+        unique=True,
+        nullable=False
+    )
+
+    short_code: Mapped[str] = mapped_column(
+        String(6),
+        nullable=False
+    )
+
+    request_hash: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False
+    ) #A SHA-256 hash of the request data. SHA-256 produces a 64-character hexadecimal string

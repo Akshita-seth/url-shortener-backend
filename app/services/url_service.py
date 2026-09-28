@@ -29,8 +29,7 @@ def create_short_url(db: Session, original_url: str) -> URL:
     ) #creates a SQLAlchemy object.
 
     db.add(new_url) # push
-    db.commit()  # save
-    db.refresh(new_url) # gets dbGenerated id into python object
+    db.flush() # sync with database without committing
 
     return new_url #URL model object
 

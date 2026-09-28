@@ -143,3 +143,104 @@ Analytics   Redis SET
 - Redis failure can add latency because the application first attempts the Redis connection before falling back to PostgreSQL.
 - No rate limiting yet.
 - No idempotency or concurrent-request protection yet.
+
+
+## V5 — Idempotent URL Creation
+
+### 1. Implemented
+
+- Idempotency-Key support for URL creation requests
+- PostgreSQL-backed idempotency records
+- SHA-256 request fingerprinting
+- Detection of repeated requests using the same Idempotency-Key
+- Repeated identical requests return the same short code
+- Reuse of an Idempotency-Key with different request data returns `409 Conflict`
+- Unique database constraint on Idempotency-Key
+
+### 2. Architecture
+
+
+Client
+   ↓
+POST /api/v1/urls
+   ↓
+Idempotency-Key
+   ↓
+Request Hash
+   ↓
+PostgreSQL
+   ↓
+Check Idempotency-Key
+   ├── New Key
+   │     ↓
+   │   Create URL
+   │     ↓
+   │   Store Key + Short Code + Hash
+   │
+   └── Existing Key
+         ↓
+      Compare Hash
+       ├── Same → Return Existing Short Code
+       └── Different → 409 Conflict
+
+
+### 3. Limitations
+
+- Sequential duplicate requests are handled correctly.
+- Concurrent requests using the same Idempotency-Key can still encounter a race condition.
+- Application-level existence checks are not sufficient by themselves to guarantee concurrency safety.
+- Concurrent idempotency handling will be addressed in V6.
+- No rate limiting yet.
+
+## V6 — Concurrent Idempotency Protection
+
+### 1. Implemented
+
+- Concurrent request testing with 10 simultaneous requests
+- Database-level protection using a unique constraint on `Idempotency-Key`
+- Proper transaction handling for URL and idempotency record creation
+- SQLAlchemy `flush()` used to stage the URL without committing
+- URL and idempotency record committed as a single transaction
+- `IntegrityError` handling for concurrent duplicate requests
+- Transaction rollback when a concurrent insert conflict occurs
+- Retrieval of the already-created URL after a concurrency conflict
+- All concurrent requests return the same URL instead of creating duplicates or returning errors
+
+### 2. Architecture
+
+
+10 Concurrent Requests
+          ↓
+   Idempotency-Key
+          ↓
+   Check Existing Key
+          ↓
+   ┌──────┴───────┐
+   ↓              ↓
+New Key      Existing Key
+   ↓              ↓
+Create URL    Return Existing URL
+   ↓
+Flush
+   ↓
+Create Idempotency Record
+   ↓
+Commit Transaction
+   ↓
+   ┌──────────────┐
+   │              │
+Success       Conflict
+   │              │
+   ↓              ↓
+Commit       Rollback
+                  ↓
+          Retrieve Existing URL
+                  ↓
+             Return Same URL
+
+
+### Limitations:
+
+- Rate limiting is not implemented yet.
+- The current rate-limiting protection will be added using Redis in V7.
+- Analytics are still persisted in PostgreSQL on every redirect.
