@@ -1,0 +1,45 @@
+# PostgreSQL stores application data.
+# Redis handles caching and rate limiting.
+# FastAPI runs the application.
+
+services:
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: urlshortener-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: urlshortener
+    ports:
+      - "5432:5432"
+    volumes:
+      - urlshortener_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d urlshortener"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: urlshortener-redis
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      RATE_LIMIT: ${RATE_LIMIT:-5}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  urlshortener_pgdata:
+    external: true
+    name: urlshortener_pgdata

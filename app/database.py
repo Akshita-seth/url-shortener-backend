@@ -3,8 +3,8 @@ from sqlalchemy.orm import sessionmaker #sessionmaker creates a factory for data
 
 from app.models import Base
 
-DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/urlshortener"
-#"Use PostgreSQL through psycopg, connect as user postgres, using this password, to PostgreSQL running on my computer at port 5432, and use the urlshortener database."
+DATABASE_URL = "postgresql+psycopg://postgres:postgres@postgres:5432/urlshortener"
+#"Use PostgreSQL through psycopg, connect as user postgres, using this password, to PostgreSQL running on docker container postgres at port 5432, and use the urlshortener database."
 
 engine = create_engine(DATABASE_URL) #Knows how to connect to PostgreSQL.
 

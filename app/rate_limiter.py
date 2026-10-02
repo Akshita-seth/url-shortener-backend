@@ -1,12 +1,16 @@
 import redis
+import os
 from fastapi import Request, HTTPException
 #Request : gives us information about the incoming HTTP request.
 
 from app.redis_client import redis_client
 
 
-RATE_LIMIT = 5
-WINDOW_SECONDS = 60
+# RATE_LIMIT = 5
+# WINDOW_SECONDS = 60
+
+RATE_LIMIT = int(os.getenv("RATE_LIMIT", "5"))
+WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 
 
 def check_rate_limit(request: Request):  #receives the incoming FastAPI Request

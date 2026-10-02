@@ -14,19 +14,18 @@ A backend project built progressively to learn backend engineering concepts and 
 - Basic redirect API
 - 404 handling for unknown short codes
 
-### 2. Architecture — V1
+### 2. Architecture
 
-Client
-   ↓
-FastAPI
-   ↓
-Pydantic Validation
-   ↓
-URL Service
-   ↓
-Python Dictionary
-   ↓
-Redirect
+```mermaid
+flowchart LR
+    A[Client] --> B[FastAPI]
+    B --> C[Pydantic Validation]
+    C --> D[URL Service]
+    D --> E[In-Memory Dictionary]
+    E --> D
+    D --> B
+    B --> F[Redirect Response]
+```
 
 ### 3. Limitations:
 
@@ -55,15 +54,18 @@ Redirect
 
 ### 2. Architecture
 
-FastAPI
-   ↓
-Pydantic
-   ↓
-SQLAlchemy Session
-   ↓
-URL Service
-   ↓
-PostgreSQL
+```mermaid
+flowchart LR
+    A[Client] --> B[FastAPI]
+    B --> C[Pydantic Validation]
+    C --> D[URL Service]
+    D --> E[SQLAlchemy]
+    E --> F[(PostgreSQL)]
+    F --> E
+    E --> D
+    D --> B
+    B --> G[Redirect Response]
+```
 
 ### 3. Limitations
 
@@ -85,17 +87,19 @@ PostgreSQL
 
 ### 2. Architecture
 
-Client
-   ↓
-FastAPI
-   ↓
-SQLAlchemy Session
-   ↓
-PostgreSQL
-   ↓
-Find URL + Update Analytics
-   ↓
-HTTP Redirect
+```mermaid
+flowchart LR
+    A[Client] --> B[GET /short_code]
+    B --> C[FastAPI]
+    C --> D[SQLAlchemy]
+    D --> E[(PostgreSQL)]
+
+    E --> F[Original URL]
+    E --> G[Increment Click Count]
+    E --> H[Update Last Accessed]
+
+    F --> I[307 Redirect]
+```
 
 ### 3. Limitations:
 - Every redirect queries PostgreSQL.
@@ -120,20 +124,22 @@ HTTP Redirect
 
 ### 2. Architecture
 
-Client
-   ↓
-FastAPI
-   ↓
-Redis
- ┌─┴───────────┐
-HIT           MISS
- ↓              ↓
-URL         PostgreSQL
- ↓              ↓
-Analytics   Redis SET
- └──────┬───────┘
-        ↓
-     Redirect
+```mermaid
+flowchart LR
+    A[Client] --> B[GET /short_code]
+    B --> C[FastAPI]
+    C --> D{Redis Cache}
+
+    D -->|Cache Hit| E[Original URL]
+    D -->|Cache Miss| F[(PostgreSQL)]
+
+    F --> E
+    E --> G[Store in Redis]
+    E --> H[Update Analytics in PostgreSQL]
+
+    G --> I[307 Redirect]
+    H --> I
+```
 
 
 ### 3. Limitations
@@ -159,29 +165,23 @@ Analytics   Redis SET
 
 ### 2. Architecture
 
+```mermaid
+flowchart TD
+    A[Client] --> B[POST /api/v1/urls]
+    B --> C[Pydantic Validation]
+    C --> D[Generate SHA-256 Request Hash]
+    D --> E{Idempotency Key Exists?}
 
-Client
-   ↓
-POST /api/v1/urls
-   ↓
-Idempotency-Key
-   ↓
-Request Hash
-   ↓
-PostgreSQL
-   ↓
-Check Idempotency-Key
-   ├── New Key
-   │     ↓
-   │   Create URL
-   │     ↓
-   │   Store Key + Short Code + Hash
-   │
-   └── Existing Key
-         ↓
-      Compare Hash
-       ├── Same → Return Existing Short Code
-       └── Different → 409 Conflict
+    E -->|Yes| F{Same Request Hash?}
+    F -->|Yes| G[Return Existing URL]
+    F -->|No| H[409 Conflict]
+
+    E -->|No| I[Generate Short Code]
+    I --> J[Create URL]
+    J --> K[Create Idempotency Record]
+    K --> L[(PostgreSQL)]
+    L --> M[Return Short URL]
+```
 
 
 ### 3. Limitations
@@ -208,38 +208,30 @@ Check Idempotency-Key
 
 ### 2. Architecture
 
+```mermaid
+flowchart TD
+    A[Multiple Concurrent Requests] --> B[FastAPI]
+    B --> C[Check Idempotency Key]
+    C --> D{Key Already Exists?}
 
-10 Concurrent Requests
-          ↓
-   Idempotency-Key
-          ↓
-   Check Existing Key
-          ↓
-   ┌──────┴───────┐
-   ↓              ↓
-New Key      Existing Key
-   ↓              ↓
-Create URL    Return Existing URL
-   ↓
-Flush
-   ↓
-Create Idempotency Record
-   ↓
-Commit Transaction
-   ↓
-   ┌──────────────┐
-   │              │
-Success       Conflict
-   │              │
-   ↓              ↓
-Commit       Rollback
-                  ↓
-          Retrieve Existing URL
-                  ↓
-             Return Same URL
+    D -->|Yes| E[Return Existing URL]
+    D -->|No| F[Create URL + Idempotency Record]
+
+    F --> G[(PostgreSQL)]
+    G --> H{Unique Key Constraint}
+
+    H -->|Winning Request| I[Commit Transaction]
+    H -->|Concurrent Duplicate| J[IntegrityError]
+    
+    J --> K[Rollback]
+    K --> L[Fetch Winning Idempotency Record]
+    L --> E
+
+    I --> E
+```
 
 
-### Limitations:
+### 3. Limitations:
 
 - Rate limiting is not implemented yet.
 - The current rate-limiting protection will be added using Redis in V7.
@@ -261,31 +253,198 @@ Commit       Rollback
 
 ### 2. Architecture
 
+```mermaid
+flowchart TD
+    A[Client] --> B[POST /api/v1/urls]
+    B --> C[Extract Client IP]
+    C --> D[(Redis)]
 
-POST /api/v1/urls
-        ↓
-   Rate Limiter
-        ↓
-   Client IP
-        ↓
-      Redis
-        ↓
-    INCR counter
-        ↓
-   ┌────┴─────┐
-   ↓          ↓
-≤ 5          > 5
-   ↓          ↓
-Allow        429
-   ↓
-Idempotency
-   ↓
-PostgreSQL
+    D --> E[INCR Rate Limit Counter]
+    E --> F{Requests <= 5?}
 
-### Limitations:
+    F -->|Yes| G[Continue Request]
+    F -->|No| H[429 Too Many Requests]
+
+    G --> I[Idempotency Check]
+    I --> J[(PostgreSQL)]
+    J --> K[Create / Return Short URL]
+```
+
+### 3. Limitations:
 
 - Rate limiting currently uses a fixed-window strategy.
 - The development limit is 5 requests per minute per IP; this can be configured for production.
 - Rate limiting is currently applied only to POST /api/v1/urls.
 - If Redis is unavailable, requests are allowed through without rate limiting.
 - Redis connection timeout configuration can be improved for faster failure detection.
+
+
+## V8 — Dockerization & Complete Testing
+
+### 1. Implemented
+
+- Dockerized the FastAPI application using a `Dockerfile`
+- Added Docker Compose to orchestrate the complete application stack
+- PostgreSQL, Redis, and FastAPI run as separate Docker containers
+- Added a PostgreSQL healthcheck
+- Configured service dependencies using Docker Compose
+- Configured Docker service-name networking:
+  - FastAPI → `postgres:5432`
+  - FastAPI → `redis:6379`
+- Added configurable Redis rate limiting using environment variables
+- Default rate limit is 5 requests per minute
+- Added `.dockerignore` to exclude development-only files from the Docker build context
+- Added a pytest-based automated API test suite
+- Tested URL creation and Pydantic validation
+- Tested redirects and non-existent short codes
+- Tested click analytics
+- Tested idempotency and idempotency-key conflicts
+- Tested concurrent requests using the same idempotency key
+- Tested Redis cache population
+- Tested rate limiting and HTTP 429 responses
+- Tested graceful fallback when Redis is unavailable
+
+### 2. Architecture
+
+#### Docker Compose Architecture
+
+```mermaid
+flowchart TB
+    C[Client]
+
+    subgraph DC[Docker Compose]
+        API[FastAPI API Container]
+        PG[(PostgreSQL Container)]
+        R[(Redis Container)]
+    end
+
+    C -->|HTTP :8000| API
+    API -->|postgres:5432| PG
+    API -->|redis:6379| R
+```
+
+#### URL Creation Flow
+
+```mermaid
+flowchart TD
+    A[Client] --> B[POST /api/v1/urls]
+    B --> C[Pydantic Validation]
+    C --> D[Redis Rate Limiter]
+    D --> E{Within Rate Limit?}
+
+    E -->|No| F[429 Too Many Requests]
+    E -->|Yes| G[Generate SHA-256 Request Hash]
+
+    G --> H{Idempotency Key Exists?}
+
+    H -->|Yes| I{Request Hash Matches?}
+    I -->|No| J[409 Conflict]
+    I -->|Yes| K[Return Existing URL]
+
+    H -->|No| L[Generate Short Code]
+    L --> M[Create URL]
+    M --> N[Create Idempotency Record]
+    N --> O[(PostgreSQL)]
+
+    O --> P[Commit Transaction]
+    P --> Q[Return Short URL]
+```
+
+#### Redirect, Caching & Analytics Flow
+
+```mermaid
+flowchart TD
+    A[Client] --> B[GET /{short_code}]
+    B --> C[FastAPI]
+    C --> D{Redis Cache}
+
+    D -->|Cache Hit| E[Get Original URL from Redis]
+    D -->|Cache Miss| F[(PostgreSQL)]
+
+    F --> G[Get Original URL]
+    G --> H[Store URL in Redis]
+    H --> E
+
+    E --> I[(PostgreSQL)]
+    I --> J[Increment Click Count]
+    I --> K[Update Last Accessed Time]
+
+    J --> L[307 Redirect]
+    K --> L
+```
+
+#### Redis Failure Handling
+
+```mermaid
+flowchart TD
+    A[API Request] --> B{Redis Available?}
+
+    B -->|Yes| C[Use Redis]
+    B -->|No| D[Catch Redis Error]
+
+    D --> E[Continue Without Redis]
+    E --> F[(PostgreSQL)]
+
+    C --> G[Continue Request]
+    F --> G
+
+    G --> H[Return API Response / Redirect]
+```
+
+### 3. Limitations
+
+- PostgreSQL credentials are currently defined directly in Docker Compose for this learning project.
+- Rate limiting uses a fixed-window strategy.
+- Rate limiting is currently applied only to `POST /api/v1/urls`.
+- Rate limiting uses the client IP as the rate-limit key.
+- Redis is not required for core URL creation or redirection because the application falls back to PostgreSQL when Redis is unavailable.
+- Redis `INCR` and `EXPIRE` are currently separate operations; a production implementation could use an atomic Lua script.
+- Analytics still requires PostgreSQL even when the original URL is retrieved from Redis.
+- There is no production secrets-management system.
+- The project is designed as a learning and interview project rather than a production deployment.
+
+### Testing
+
+The final implementation was tested for:
+
+- URL creation
+- Invalid URL validation
+- URL redirection
+- Non-existent short codes
+- Click analytics
+- Idempotent requests
+- Idempotency-key conflicts
+- Concurrent idempotent requests
+- Redis cache population
+- Redis failure fallback
+- Rate limiting
+- HTTP 429 responses
+- Docker Compose deployment
+
+The concurrency test was executed separately with a temporary higher rate limit so that all 10 concurrent requests could reach the idempotency logic. The application's normal/default rate limit remains 5 requests per minute.
+
+
+## Project Structure
+
+```text
+UrlShortener/
+├── app/
+│   ├── __init__.py
+│   ├── database.py
+│   ├── main.py
+│   ├── models.py
+│   ├── rate_limiter.py
+│   ├── redis_client.py
+│   ├── schemas.py
+│   └── services/
+│       ├── __init__.py
+│       └── url_service.py
+├── tests/
+│   └── test_api.py
+├── .dockerignore
+├── .gitignore
+├── Dockerfile
+├── docker-compose.yml
+├── README.md
+└── requirements.txt
+```
