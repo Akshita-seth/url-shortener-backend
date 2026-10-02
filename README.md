@@ -448,3 +448,78 @@ UrlShortener/
 ├── README.md
 └── requirements.txt
 ```
+
+## Setup & Running
+
+### 1. Clone the repository
+
+```bash
+git clone <your-github-repository-url>
+cd UrlShortener
+```
+
+### 2. Create and activate the virtual environment
+
+```powershell
+python -m venv .venv
+```
+
+PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+### 3. Install dependencies
+
+```powershell
+pip install -r requirements.txt
+```
+
+### 4. Start PostgreSQL and Redis
+
+The project uses Docker Compose to run PostgreSQL, Redis, and the FastAPI application:
+
+```powershell
+docker compose up -d --build
+```
+
+Check the running containers:
+
+```powershell
+docker compose ps
+```
+
+### 5. Access the API
+
+Open:
+
+```text
+http://localhost:8000
+```
+
+Swagger documentation:
+
+```text
+http://localhost:8000/docs
+```
+
+### 6. Run the tests
+
+```powershell
+docker compose exec api python -m pytest tests/test_api.py -v
+```
+
+### 7. Stop the application
+
+```powershell
+docker compose down
+```
+
+The PostgreSQL data is stored in the Docker volume and is preserved when the containers are stopped.
+
+### 8. Restart the project
+
+```powershell
+docker compose up -d
+```
