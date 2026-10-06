@@ -467,7 +467,7 @@ python -m venv .venv
 PowerShell:
 
 ```powershell
-.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 ```
 
 ### 3. Install dependencies
@@ -490,6 +490,23 @@ Check the running containers:
 docker compose ps
 ```
 
+If containers already exist but are stopped:
+
+```powershell
+docker compose start
+```
+Restarts the existing services.
+Useful when you don't need to rebuild the image.
+
+```powershell
+docker compose restart
+```
+Runtime behaviourd
+
+```powershell
+docker compose logs -f api
+```
+
 ### 5. Access the API
 
 Open:
@@ -503,12 +520,33 @@ Swagger documentation:
 ```text
 http://localhost:8000/docs
 ```
+For redirect:
+
+```text
+http://localhost:8000/Ab12Xy
+```
 
 ### 6. Run the tests
 
 ```powershell
 docker compose exec api python -m pytest tests/test_api.py -v
 ```
+-v pytest flag, v stands for verbose method, pytest prints the name of each test function and its result (pass/fail) 
+
+
+```powershell
+docker compose exec api python -m pytest tests/test_api.py::test_function_name -v
+```
+For a specific function to run
+
+``` powershell
+docker compose exec api python -m pytest tests/test_api.py -v -k "not test_function_name"
+```
+To run the .py file without a specific function
+-k Keyword expression filter.
+Runs only tests whose names match the expression.
+not concurrent_idempotency means: Run all tests except those whose name contains concurrent_idempotency
+
 
 ### 7. Stop the application
 
@@ -522,4 +560,70 @@ The PostgreSQL data is stored in the Docker volume and is preserved when the con
 
 ```powershell
 docker compose up -d
+```
+
+### 9. Accessing the database ad redis
+
+Open an interactive PostgreSQL shell inside the running PostgreSQL container, connecting as postgres to the urlshortener database.
+
+```powershell
+docker exec -it urlshortener-postgres psql -U postgres -d urlshortener
+```
+
+\l list databases
+\dt list tables
+\d urls  describe urls table
+SELECT * FROM urls;
+SELECT * FROM idempotency_keys;
+\q to exit postgresql
+
+Open the Redis CLI inside the running Redis container:
+
+```powershell
+docker exec -it urlshortener-redis redis-cli
+```
+
+KEYS * (list redis keys)
+GET <short_code> (get the cached url)
+GET rate_limit:127.0.0.1 (Check the rate-limit counter)
+TTL rate_limit:127.0.0.1  (Check the remaining TTL of the rate-limit key)
+DEL <key> (delete a specific redis key)
+exit (to exit)
+
+
+## Demo Run
+
+> **Important:** The normal application configuration uses `RATE_LIMIT=5`.
+> The concurrency test sends 10 simultaneous requests, so temporarily increase
+> the rate limit to `100` only for that test. Restore it to `5` immediately afterward.
+
+---
+
+### **Step 1 — Start the Application**
+
+From the project root:
+
+```powershell
+docker compose up -d --build
+
+docker compose exec api python -m pytest tests/test_api.py -v -k "not concurrent_idempotency"
+```
+We get 9 passed.
+
+Now concurency demo:
+```powershell
+$env:RATE_LIMIT="100"
+
+docker compose up -d --force-recreate api
+
+docker compose exec api printenv RATE_LIMIT
+
+docker compose exec api python -m pytest tests/test_api.py::test_concurrent_idempotency -v -s
+```
+Now restoring:
+```powershell
+Remove-Item Env:RATE_LIMIT
+docker compose up -d --force-recreate api
+docker compose exec api printenv RATE_LIMIT
+docker compose exec api python -m pytest tests/test_api.py::test_rate_limit -v
 ```

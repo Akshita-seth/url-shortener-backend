@@ -151,7 +151,7 @@ def redirect_to_url(
             redis_client.set(
                 short_code,
                 original_url,
-                ex=3600
+                ex=3600  #TTL 3600 seconds = 1 hour
             )
         except redis.RedisError:
             pass

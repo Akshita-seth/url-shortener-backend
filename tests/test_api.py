@@ -1,11 +1,13 @@
-import requests
-import uuid
-import pytest
-from concurrent.futures import ThreadPoolExecutor
+import requests  #used to send actual HTTP requests
+import uuid  #Used to generate unique IDs. [bcz idemKeys are used, and every one ened to be fresh]
+import pytest  #testing fraamework
+from concurrent.futures import ThreadPoolExecutor #This is used specifically for your concurrency test.
 
+#below 2 are used only in your analytics test. Gray-Box Testing: We are peeking into the database to verify that the click_count and last_accessed_at fields are updated correctly.
 from app.database import SessionLocal
 from app.models import URL
-from app.redis_client import redis_client
+
+from app.redis_client import redis_client  #Used to inspect/reset Redis state.
 
 
 BASE_URL = "http://127.0.0.1:8000"
@@ -35,14 +37,14 @@ def test_create_url():
             "original_url": "https://example.com"
         }
     )
-
+    # This is a functional API assertion.
     assert response.status_code == 200
 
-    data = response.json()
+    data = response.json()  # .json() converts the response body into a Python dictionary
 
     assert "id" in data
     assert "short_code" in data
-    assert data["original_url"] == "https://example.com/"
+    assert data["original_url"] == "https://example.com/" # Pydantic's HttpUrl normalization produces the trailing slash.
 
 
 def test_invalid_url():
@@ -84,7 +86,7 @@ def test_idempotency():
     assert (
         first_response.json()["short_code"]
         == second_response.json()["short_code"]
-    )
+    )  # Same idempotency key + same request = same result.
 
 
 def test_redirect():
@@ -144,7 +146,7 @@ def test_analytics():
     db = SessionLocal()
 
     try:
-        url = (
+        url = (       #SELECT * FROM urls WHERE short_code = ... LIMIT 1;
             db.query(URL)
             .filter(URL.short_code == short_code)
             .first()
@@ -192,28 +194,29 @@ def test_concurrent_idempotency():
             json={"original_url": "https://example.com"}
         )
 
-        return response.status_code, response.json()
+        return response.status_code, response.json() # a tuple of (status_code, response_json) is returned
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=10) as executor: # Creates up to 10 worker threads.
         results = list(
             executor.map(
                 lambda _: send_request(),
-                range(10)
+                range(10) # 0 to 9, 10 requests in total
             )
         )
 
     status_codes = [status for status, _ in results]
     responses = [data for _, data in results]
+    print("Concurrent status codes:", status_codes)
+    assert all(status == 200 for status in status_codes) # Every one of the 10 concurrent requests must succeed.
+    #This verifies your IntegrityError recovery mechanism.
 
-    assert all(status == 200 for status in status_codes)
-
-    short_codes = {
+    short_codes = {   # This is a Python set comprehension (to avoid duplicates)
         data["short_code"]
         for data in responses
     }
 
     assert len(short_codes) == 1
-
+   # It tests: Concurrency + Idempotency + DB UNIQUE constraint + Transaction handling +IntegrityError recovery
 
 def test_rate_limit():
     responses = []
@@ -230,7 +233,7 @@ def test_rate_limit():
     assert responses[5] == 429
 
 
-def test_cache_population():
+def test_cache_population():  # This test verifies your cache-aside behavior.
     create_response = requests.post(
         f"{BASE_URL}/api/v1/urls",
         headers={"Idempotency-Key": unique_key()},

@@ -38,6 +38,8 @@ def check_rate_limit(request: Request):  #receives the incoming FastAPI Request
                 status_code=429,
                 detail="Too many requests. Please try again later."
             )
+    #The race happens because INCR and EXPIRE are two separate commands.
+
 
     except redis.RedisError:  #lets us catch Redis-related failures.
         # Redis failure should not make the API unavailable.
